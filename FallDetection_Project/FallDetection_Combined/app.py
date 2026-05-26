@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Human-Falling-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'FallDetection_Track2'))
 
 # ── TELEGRAM CONFIG ───────────────────────────────
-BOT_TOKEN = "7661152384:AAHh-6mQQQq944M7E1hV95wavqnqB8ESKkg"
-CHAT_ID   = "8738893566"
+BOT_TOKEN = "YOUR_BOT_TOKEN"
+CHAT_ID   = "YOUR_CHAT_ID"
 # ─────────────────────────────────────────────────
 
 # ── FLASK APP ─────────────────────────────────────
