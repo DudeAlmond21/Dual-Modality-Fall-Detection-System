@@ -44,20 +44,16 @@ ESP32 + MPU6050 ─► IMU Pipeline ──┘
 
 # Dashboard Preview
 
-> Add dashboard screenshot below
-
 ```md
-![Dashboard](images/dashboard.jpeg)
+![](images/dashboard.jpeg)
 ```
 
 ---
 
 # Telegram Alert Preview
 
-> Add Telegram alert screenshot below
-
 ```md
-![Telegram Alert](images/telegram_alert.jpeg)
+![](images/telegram_alert.jpeg)
 ```
 
 ---
