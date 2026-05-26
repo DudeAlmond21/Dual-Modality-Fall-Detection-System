@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fall Detection System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0d1117;
+            color: #e6edf3;
+            font-family: 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e6edf3;
+        }
+        .live-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #1f2937;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        .live-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .uptime {
+            font-size: 13px;
+            color: #8b949e;
+        }
+
+        /* ── FLASH OVERLAY ── */
+        .flash-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 9999;
+            pointer-events: none;
+            animation: flash 0.5s ease-in-out 3;
+        }
+        @keyframes flash {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ── ALERT BANNER ── */
+        .alert-banner {
+            display: none;
+            padding: 12px 20px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 1px;
+        }
+
+        /* ── MAIN GRID ── */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 16px;
+            padding: 16px;
+        }
+
+        /* ── CAMERA PANEL ── */
+        .camera-panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 10px 16px;
+            border-bottom: 1px solid #30363d;
+            font-size: 13px;
+            font-weight: 600;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .camera-feed {
+            width: 100%;
+            display: block;
+            background: #000;
+            object-fit: cover;
+            aspect-ratio: 16/9;
+        }
+        .camera-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1px;
+            background: #30363d;
+        }
+        .stat-box {
+            background: #161b22;
+            padding: 10px 14px;
+            text-align: center;
+        }
+        .stat-label {
+            font-size: 10px;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        /* ── RIGHT PANEL ── */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* ── STATUS CARD ── */
+        .status-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid #21262d;
+            font-size: 13px;
+        }
+        .status-row:last-child { border-bottom: none; }
+        .status-label { color: #8b949e; }
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+        }
+        .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+        }
+        .dot-green  { background: #22c55e; }
+        .dot-red    { background: #ef4444; }
+        .dot-orange { background: #f97316; }
+        .dot-gray   { background: #6b7280; }
+
+        /* ── FUSION CARD ── */
+        .fusion-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+        }
+        .fusion-title {
+            font-size: 11px;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+        .fusion-result {
+            font-size: 22px;
+            font-weight: 800;
+            padding: 12px;
+            border-radius: 6px;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+        .fusion-sub {
+            font-size: 11px;
+            color: #8b949e;
+            margin-top: 8px;
+        }
+        .weight-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #8b949e;
+            margin-top: 6px;
+        }
+
+        /* ── IMU CARD ── */
+        .imu-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .imu-values {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .imu-val-box {
+            background: #0d1117;
+            border-radius: 6px;
+            padding: 8px;
+            text-align: center;
+        }
+        .imu-val-label {
+            font-size: 10px;
+            color: #8b949e;
+            text-transform: uppercase;
+        }
+        .imu-val-num {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: monospace;
+            color: #58a6ff;
+        }
+
+        /* ── CHARTS ── */
+        .charts-section {
+            padding: 16px;
+            padding-top: 0;
+        }
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .chart-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .chart-card canvas {
+            max-height: 150px;
+        }
+
+        /* ── FALL LOG ── */
+        .log-section {
+            padding: 0 16px 16px;
+        }
+        .log-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .log-table th {
+            background: #21262d;
+            padding: 8px 14px;
+            text-align: left;
+            font-size: 11px;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .log-table td {
+            padding: 8px 14px;
+            border-bottom: 1px solid #21262d;
+        }
+        .log-table tr:last-child td { border-bottom: none; }
+        .log-table tr:hover td { background: #1f2937; }
+        .badge {
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-camera   { background: #1d4ed8; color: #93c5fd; }
+        .badge-imu      { background: #065f46; color: #6ee7b7; }
+        .empty-log {
+            text-align: center;
+            color: #8b949e;
+            padding: 20px;
+            font-size: 13px;
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 768px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Flash overlay -->
+<div class="flash-overlay" id="flashOverlay"></div>
+
+<!-- Header -->
+<div class="header">
+    <div style="display:flex; align-items:center; gap:12px;">
+        <div class="live-badge">
+            <div class="live-dot"></div>
+            LIVE
+        </div>
+        <h1>Fall Detection System</h1>
+    </div>
+    <div style="display:flex; align-items:center; gap:20px;">
+        <span class="uptime" id="uptimeDisplay">Uptime: 00:00:00</span>
+        <span style="font-size:13px; color:#8b949e;" id="connStatus">⚪ Connecting...</span>
+    </div>
+</div>
+
+<!-- Alert Banner -->
+<div class="alert-banner" id="alertBanner"></div>
+
+<!-- Main Grid -->
+<div class="main-grid">
+
+    <!-- Camera Panel -->
+    <div class="camera-panel">
+        <div class="panel-header">
+            📷 Camera Feed — Track 1 (Vision)
+        </div>
+        <img class="camera-feed" src="/video_feed"
+             alt="Camera Feed"
+             onerror="this.style.background='#1a1a2e'; this.alt='Camera Offline';">
+        <div class="camera-stats">
+            <div class="stat-box">
+                <div class="stat-label">Action</div>
+                <div class="stat-value" id="cameraAction"
+                     style="font-size:14px; color:#e6edf3;">--</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Confidence</div>
+                <div class="stat-value" id="cameraConf"
+                     style="color:#58a6ff;">--%</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">FPS</div>
+                <div class="stat-value" id="fpsVal"
+                     style="color:#22c55e;">--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="right-panel">
+
+        <!-- System Status -->
+        <div class="status-card">
+            <div class="panel-header" style="padding:0 0 10px 0; border:none;">
+                ⚙️ System Status
+            </div>
+            <div class="status-row">
+                <span class="status-label">Camera</span>
+                <div class="status-indicator" id="cameraStatus">
+                    <div class="dot dot-gray"></div>
+                    <span>Waiting...</span>
+                </div>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Wearable (IMU)</span>
+                <div class="status-indicator" id="imuStatus">
+                    <div class="dot dot-gray"></div>
+                    <span>Waiting...</span>
+                </div>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Person Detected</span>
+                <div class="status-indicator" id="personStatus">
+                    <div class="dot dot-gray"></div>
+                    <span>--</span>
+                </div>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Brightness</span>
+                <span id="brightnessVal" style="color:#8b949e;">--</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Falls Today</span>
+                <span id="fallCount"
+                      style="font-weight:700; color:#ef4444;">0</span>
+            </div>
+        </div>
+
+        <!-- Fusion Decision -->
+        <div class="fusion-card">
+            <div class="fusion-title">🔀 Fusion Decision (L1 + L2 + L3)</div>
+            <div class="fusion-result" id="fusionResult"
+                 style="background:#1a2e1a; color:#22c55e;">
+                NORMAL
+            </div>
+            <div class="fusion-sub" id="fusionConfidence">
+                Confidence: NONE
+            </div>
+            <div class="weight-row">
+                <span>📷 Camera weight: <b id="camWeight">--</b></span>
+                <span>⌚ IMU weight: <b id="imuWeight">--</b></span>
+            </div>
+        </div>
+
+        <!-- IMU Values -->
+        <div class="imu-card">
+            <div class="panel-header"
+                 style="padding:0 0 10px 0; border:none;">
+                ⌚ Wearable — Track 2 (IMU)
+            </div>
+            <div class="imu-values">
+                <div class="imu-val-box">
+                    <div class="imu-val-label">SVM</div>
+                    <div class="imu-val-num" id="imuSvm">--</div>
+                </div>
+                <div class="imu-val-box">
+                    <div class="imu-val-label">Jerk</div>
+                    <div class="imu-val-num" id="imuJerk">--</div>
+                </div>
+            </div>
+            <div class="status-row">
+                <span class="status-label">IMU Status</span>
+                <span id="imuStatusText"
+                      style="font-weight:600; color:#22c55e;">--</span>
+            </div>
+            <div class="status-row" style="border:none;">
+                <span class="status-label">IMU Confidence</span>
+                <span id="imuConfVal"
+                      style="color:#58a6ff;">--%</span>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="charts-section">
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="panel-header"
+                 style="padding:0 0 10px 0; border:none;">
+                📈 SVM (Signal Vector Magnitude)
+            </div>
+            <canvas id="svmChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="panel-header"
+                 style="padding:0 0 10px 0; border:none;">
+                ⚡ Jerk (Rate of Change)
+            </div>
+            <canvas id="jerkChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Fall Log -->
+<div class="log-section">
+    <div class="log-card">
+        <div class="panel-header">
+            📋 Fall Event Log
+        </div>
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Source</th>
+                    <th>Confidence</th>
+                    <th>Type</th>
+                </tr>
+            </thead>
+            <tbody id="logBody">
+                <tr>
+                    <td colspan="4" class="empty-log">
+                        No fall events recorded yet
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // ── SOCKET CONNECTION ─────────────────────────
+    const socket = io();
+    let fallCount = 0;
+    let startTime = Date.now();
+
+    socket.on('connect', () => {
+        document.getElementById('connStatus').textContent = '🟢 Connected';
+    });
+    socket.on('disconnect', () => {
+        document.getElementById('connStatus').textContent = '🔴 Disconnected';
+    });
+
+    // ── UPTIME COUNTER ────────────────────────────
+    setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+        const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        document.getElementById('uptimeDisplay').textContent =
+            `Uptime: ${h}:${m}:${s}`;
+    }, 1000);
+
+    // ── CHARTS SETUP ──────────────────────────────
+    const maxPoints = 50;
+    const labels = Array(maxPoints).fill('');
+    const svmData  = Array(maxPoints).fill(0);
+    const jerkData = Array(maxPoints).fill(0);
+
+    const chartOptions = (color, label, thresholdVal) => ({
+        type: 'line',
+        data: {
+            labels: labels.slice(),
+            datasets: [{
+                label: label,
+                data: [],
+                borderColor: color,
+                backgroundColor: color + '20',
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: true,
+                tension: 0.3
+            },
+            ...(thresholdVal ? [{
+                label: 'Threshold',
+                data: Array(maxPoints).fill(thresholdVal),
+                borderColor: '#ef444480',
+                borderWidth: 1,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                fill: false
+            }] : [])
+            ]
+        },
+        options: {
+            responsive: true,
+            animation: false,
+            scales: {
+                x: { display: false },
+                y: {
+                    grid: { color: '#21262d' },
+                    ticks: { color: '#8b949e', font: { size: 10 } }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+
+    const svmChart = new Chart(
+        document.getElementById('svmChart'),
+        chartOptions('#58a6ff', 'SVM', null)
+    );
+    const jerkChart = new Chart(
+        document.getElementById('jerkChart'),
+        chartOptions('#f97316', 'Jerk', 20)
+    );
+
+    function addChartPoint(chart, value) {
+        if (chart.data.datasets[0].data.length >= maxPoints) {
+            chart.data.datasets[0].data.shift();
+            chart.data.labels.shift();
+        }
+        chart.data.datasets[0].data.push(value);
+        chart.data.labels.push('');
+        chart.update('none');
+    }
+
+    // ── FLASH + SOUND ─────────────────────────────
+    function triggerFlash(color) {
+        const overlay = document.getElementById('flashOverlay');
+        overlay.style.background = color;
+        overlay.style.display = 'block';
+        setTimeout(() => { overlay.style.display = 'none'; }, 1500);
+    }
+
+    function playBeep(frequency, duration) {
+        try {
+            const ctx = new (window.AudioContext
+                          || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = frequency;
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(
+                0.001, ctx.currentTime + duration / 1000);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + duration / 1000);
+        } catch(e) {}
+    }
+
+    // ── ALERT BANNER ──────────────────────────────
+    let bannerTimeout = null;
+    function showBanner(message, color, textColor) {
+        const banner = document.getElementById('alertBanner');
+        banner.textContent = message;
+        banner.style.background = color;
+        banner.style.color = textColor;
+        banner.style.display = 'block';
+        if (bannerTimeout) clearTimeout(bannerTimeout);
+        bannerTimeout = setTimeout(() => {
+            banner.style.display = 'none';
+        }, 5000);
+    }
+
+    // ── SOCKET UPDATE ─────────────────────────────
+    let lastFusionResult = 'NORMAL';
+
+    socket.on('update', (data) => {
+
+        // Camera stats
+        const action = data.camera_action || '--';
+        document.getElementById('cameraAction').textContent = action;
+        document.getElementById('cameraConf').textContent =
+            data.camera_conf + '%';
+        document.getElementById('fpsVal').textContent =
+            data.fps.toFixed(1);
+
+        // Camera action color
+        const actionEl = document.getElementById('cameraAction');
+        if (action === 'Fall Down') {
+            actionEl.style.color = '#ef4444';
+        } else if (action === 'Lying Down') {
+            actionEl.style.color = '#f97316';
+        } else {
+            actionEl.style.color = '#e6edf3';
+        }
+
+        // Camera status
+        const camStatusEl = document.getElementById('cameraStatus');
+        if (data.person_detected) {
+            camStatusEl.innerHTML =
+                '<div class="dot dot-green"></div><span style="color:#22c55e">Person Detected</span>';
+        } else {
+            camStatusEl.innerHTML =
+                '<div class="dot dot-orange"></div><span style="color:#f97316">No Person</span>';
+        }
+
+        // IMU status
+        const imuStatusEl = document.getElementById('imuStatus');
+        if (data.imu_connected) {
+            imuStatusEl.innerHTML =
+                '<div class="dot dot-green"></div><span style="color:#22c55e">Connected</span>';
+        } else {
+            imuStatusEl.innerHTML =
+                '<div class="dot dot-red"></div><span style="color:#ef4444">Disconnected</span>';
+        }
+
+        // Person detected
+        const personEl = document.getElementById('personStatus');
+        if (data.person_detected) {
+            personEl.innerHTML =
+                '<div class="dot dot-green"></div><span style="color:#22c55e">Yes</span>';
+        } else {
+            personEl.innerHTML =
+                '<div class="dot dot-gray"></div><span style="color:#8b949e">No</span>';
+        }
+
+        // Brightness
+        document.getElementById('brightnessVal').textContent =
+            data.brightness.toFixed(1);
+
+        // IMU values
+        document.getElementById('imuSvm').textContent  = data.imu_svm;
+        document.getElementById('imuJerk').textContent = data.imu_jerk;
+        document.getElementById('imuStatusText').textContent =
+            data.imu_status || '--';
+        document.getElementById('imuConfVal').textContent =
+            data.imu_conf + '%';
+
+        // IMU status color
+        const imuTxtEl = document.getElementById('imuStatusText');
+        if (data.imu_status === 'FALL CONFIRMED') {
+            imuTxtEl.style.color = '#ef4444';
+        } else if (data.imu_status === 'Impact Detected') {
+            imuTxtEl.style.color = '#f97316';
+        } else {
+            imuTxtEl.style.color = '#22c55e';
+        }
+
+        // Adaptive weights
+        document.getElementById('camWeight').textContent = data.cam_weight;
+        document.getElementById('imuWeight').textContent = data.imu_weight;
+
+        // Fusion result
+        const fusionEl = document.getElementById('fusionResult');
+        const fusionResult = data.fusion_result;
+
+        if (fusionResult === 'CONFIRMED FALL') {
+            fusionEl.style.background = '#3b0f0f';
+            fusionEl.style.color = '#ef4444';
+        } else if (fusionResult === 'POSSIBLE FALL') {
+            fusionEl.style.background = '#2d1e0a';
+            fusionEl.style.color = '#f97316';
+        } else {
+            fusionEl.style.background = '#0d2018';
+            fusionEl.style.color = '#22c55e';
+        }
+        fusionEl.textContent = fusionResult;
+
+        document.getElementById('fusionConfidence').textContent =
+            'Confidence: ' + data.fusion_confidence;
+
+        // Trigger effects on new fall detection
+        if (fusionResult !== lastFusionResult) {
+            if (fusionResult === 'CONFIRMED FALL') {
+                triggerFlash('#ef4444');
+                playBeep(880, 800);
+                showBanner('🚨 CONFIRMED FALL DETECTED!',
+                           '#3b0f0f', '#ef4444');
+                fallCount++;
+                document.getElementById('fallCount').textContent = fallCount;
+                refreshLog();
+            } else if (fusionResult === 'POSSIBLE FALL') {
+                triggerFlash('#f97316');
+                playBeep(440, 400);
+                showBanner('⚠️ Possible Fall Detected',
+                           '#2d1e0a', '#f97316');
+            }
+            lastFusionResult = fusionResult;
+        }
+
+        // Charts
+        addChartPoint(svmChart,  data.imu_svm);
+        addChartPoint(jerkChart, data.imu_jerk);
+    });
+
+    // ── FALL LOG ──────────────────────────────────
+    function refreshLog() {
+        fetch('/fall_log')
+            .then(r => r.json())
+            .then(events => {
+                const tbody = document.getElementById('logBody');
+                if (!events || events.length === 0) {
+                    tbody.innerHTML =
+                        '<tr><td colspan="4" class="empty-log">' +
+                        'No fall events recorded yet</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = events.map(e => {
+                    const badgeClass = e.source === 'CAMERA'
+                        ? 'badge-camera' : 'badge-imu';
+                    const rowColor = e.type === 'CONFIRMED'
+                        ? 'color:#ef4444' : '';
+                    return `<tr>
+                        <td style="${rowColor}">${e.timestamp}</td>
+                        <td><span class="badge ${badgeClass}">${e.source}</span></td>
+                        <td>${e.confidence}%</td>
+                        <td style="${rowColor}">${e.type}</td>
+                    </tr>`;
+                }).join('');
+            })
+            .catch(() => {});
+    }
+
+    // Refresh log every 5 seconds
+    setInterval(refreshLog, 5000);
+    refreshLog();
+</script>
+</body>
+</html>
